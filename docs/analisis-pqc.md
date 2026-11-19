@@ -43,3 +43,60 @@ ML-KEM, derivado de CRYSTALS-Kyber, es un mecanismo de encapsulamiento de claves
 ML-DSA, derivado de CRYSTALS-Dilithium, es un esquema de firma digital que también se basa en MLWE. La firma crece de 2420 bytes en ML-DSA-44 a 4627 bytes en ML-DSA-87, mientras que una firma ECDSA P-256 medida con OpenSSL ocupó entre 69 y 72 bytes. En velocidad, la verificación de ML-DSA-44 tardó la mitad que la de Ed25519 y la firma unas 4.8 veces más, de modo que el costo del cambio está más en los bytes que en el procesador. ML-DSA reemplaza a ECDSA y a las firmas RSA.
 
 SLH-DSA, derivado de SPHINCS+, es un esquema de firma que solo depende de la seguridad de funciones hash. Por eso se considera más conservador que ML-DSA, ya que no supone que un problema de retículos como MLWE sea difícil, y un avance en el criptoanálisis de retículos no lo afectaría. A cambio, sus firmas son mucho más grandes (7856 bytes en la variante pequeña) y firmar con SLH-DSA-128s es unas 8000 veces más lento que con Ed25519. Por eso se recomienda como respaldo para firmas de larga vida o de bajo volumen, como certificados raíz o firmware, y no como firma principal en sistemas que firman miles de documentos al día.
+
+## 3. Plan de migración para tres perfiles organizacionales
+
+El plan sigue las tres etapas que propone ETSI TR 103 619, que son armar el inventario, preparar el plan y ejecutar la migración (ETSI, 2020), y las recomendaciones de CISA, NSA y NIST de crear una hoja de ruta, levantar un inventario criptográfico y pedir a los proveedores sus planes de PQC (CISA, 2023). La urgencia de cada perfil depende de cuántos años deben seguir protegidos sus datos, porque si ese horizonte es mayor que el tiempo que falta para que exista un computador cuántico capaz de romper la criptografía actual, lo que se capture hoy quedará expuesto después.
+
+### Perfil A — Hospital universitario
+
+1. **Inventario.** El portal de pacientes con TLS (intercambio X25519 o ECDHE y certificados ECDSA o RSA), la firma de prescripciones con ECDSA, el intercambio de historias clínicas con otras entidades, las VPN con sedes y aseguradoras y la PKI interna que emite los certificados.
+2. **Clasificación de datos.** La historia clínica tiene una sensibilidad de 50 a 75 años y es el dato más crítico, porque un adversario puede guardarla cifrada hoy y descifrarla en 10 a 15 años cuando todavía sea sensible. Las prescripciones firmadas necesitan sobre todo autenticidad al momento de emitirse, y los datos administrativos tienen un horizonte mucho menor.
+3. **Estrategia híbrida.** El portal y los enlaces que transportan historias clínicas pasan primero a X25519MLKEM768, que protege la confidencialidad contra la captura actual sin perder la seguridad clásica. Las firmas de prescripciones se emiten con ML-DSA en paralelo a ECDSA mientras todos los sistemas que las verifican se actualizan.
+4. **Cronograma.**
+
+| Fase | Periodo | Hito verificable |
+|---|---|---|
+| Inventario | Primer semestre de 2027 | Lista aprobada de sistemas, algoritmos y proveedores con criptografía asimétrica |
+| TLS híbrido | Segundo semestre de 2027 | Todas las conexiones del portal y de intercambio de historias negocian X25519MLKEM768 |
+| Firmas en paralelo | 2028 | Cada prescripción lleva firma ML-DSA y ECDSA, y los verificadores aceptan ambas |
+| Retiro de lo clásico | 2029 a 2030 | Se desactiva ECDSA y RSA, y los certificados raíz de larga vida pasan a SLH-DSA |
+
+5. **Riesgos y mitigaciones.** Los equipos médicos antiguos que no se pueden actualizar se aíslan en una red separada detrás de un proxy que sí use TLS híbrido. Si el proveedor de la historia clínica electrónica no tiene soporte PQC, se exige en el contrato una fecha de entrega. El aumento de tamaño de los certificados se prueba antes con los navegadores y dispositivos que usan los pacientes.
+
+**Priorización.** Este perfil va primero porque la amenaza de capturar ahora y descifrar después ya está activa, y la confidencialidad de la historia clínica no se puede recuperar una vez filtrada.
+
+### Perfil B — Startup de comercio electrónico
+
+1. **Inventario.** TLS 1.3 de la tienda y de la API con X25519 y certificados ECDSA, la integración con la pasarela de pagos, los tokens firmados de sesión y la base de datos cifrada con AES-256.
+2. **Clasificación de datos.** Los datos de tarjetas tienen una sensibilidad de 5 a 7 años, que corresponde al ciclo de vida de la tarjeta, y los datos de sesión duran mucho menos. El cifrado en reposo con AES-256 ya es suficiente frente a Grover.
+3. **Estrategia híbrida.** Se activa X25519MLKEM768 en el servidor o en la CDN, ya que los navegadores principales lo soportan, y se mantienen los certificados ECDSA hasta que las autoridades de certificación ofrezcan certificados ML-DSA.
+4. **Cronograma.**
+
+| Fase | Periodo | Hito verificable |
+|---|---|---|
+| Inventario y TLS híbrido | 2027 | X25519MLKEM768 activo y medido el porcentaje de conexiones que lo negocian |
+| Agilidad criptográfica | 2028 | Librerías actualizadas y algoritmos configurables sin cambiar código, validado con el auditor de PCI-DSS |
+| Firmas post-cuánticas | 2030 a 2031 | Certificados ML-DSA en producción y evaluación de pasar a PQC puro |
+
+5. **Riesgos y mitigaciones.** Algunos clientes o equipos intermedios fallan cuando el handshake crece (Westerbaan, 2024), por lo que se deja X25519 como respaldo y se monitorean los errores de conexión. Además, cualquier cambio en el flujo de pago se coordina con el cumplimiento de PCI-DSS.
+
+**Priorización.** Este perfil tiene menor urgencia porque sus datos dejan de ser sensibles en pocos años, pero el TLS híbrido cuesta poco y se puede activar desde ya como ventaja frente a la competencia.
+
+### Perfil C — Entidad gubernamental de defensa
+
+1. **Inventario.** Comunicaciones clasificadas, la PKI nacional que firma documentos oficiales, las VPN entre agencias y la firma de firmware y software de los equipos.
+2. **Clasificación de datos.** La información clasificada tiene una sensibilidad de 25 a 50 años, por lo que todo el tráfico actual está expuesto a ser capturado y descifrado más adelante.
+3. **Estrategia híbrida.** CNSA 2.0 exige ML-KEM-1024, ML-DSA-87, AES-256 y SHA-384 o SHA-512, además de LMS o XMSS para firmar firmware. La NSA no exige soluciones híbridas y solo acepta las que ella misma haya aprobado para protocolos específicos, así que el híbrido se usa solo donde la interoperabilidad lo obligue (NSA, 2026).
+4. **Cronograma.** Este perfil sigue las fechas obligatorias de CNSA 2.0 (NSA, 2026).
+
+| Fase | Fecha | Hito verificable |
+|---|---|---|
+| Adquisiciones | 1 de enero de 2027 | Toda compra nueva para sistemas de seguridad nacional soporta CNSA 2.0 |
+| Retiro de equipos | 31 de diciembre de 2030 | Se retira el equipo que no soporte CNSA 2.0, salvo excepción aprobada |
+| Uso obligatorio | 31 de diciembre de 2031 | Todos los sistemas usan los algoritmos de CNSA 2.0 |
+| Meta nacional | 2035 | Todos los sistemas de seguridad nacional son resistentes a ataques cuánticos |
+
+5. **Riesgos y mitigaciones.** Parte del hardware no se podrá actualizar y habrá que renovarlo, por lo que se presupuesta desde la fase de adquisiciones. La interoperabilidad entre agencias se resuelve acordando perfiles comunes, y como no se sabría si un adversario ya tiene un computador cuántico, no se espera a ver señales de amenaza para migrar.
+
+**Priorización.** Este perfil comparte la prioridad máxima con el hospital, pero además la migración es obligatoria y tiene fechas fijas, lo que lo vuelve el más estricto de los tres.
