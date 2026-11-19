@@ -58,3 +58,29 @@ c: 2/═════════════════════════
 Con el oráculo constante las 1024 mediciones dieron |00⟩ y con el balanceado las 1024 dieron |11⟩, así que el resultado fue determinista en los dos casos y las dos verificaciones del script pasaron.
 
 Clásicamente, para n=2 hay 4 entradas posibles y se necesitan hasta 3 evaluaciones, porque si las dos primeras dan el mismo valor la función todavía puede ser balanceada y solo la tercera lo decide. En cambio, el circuito cuántico evalúa el oráculo una sola vez, ya que las puertas H ponen las 4 entradas en superposición y el auxiliar en |−⟩ hace que f(x) quede como un cambio de fase en cada una. Luego las H finales hacen interferir esas fases, de modo que si la función es constante toda la probabilidad se concentra en |00⟩ y si es balanceada la de |00⟩ se cancela por completo.
+
+## Checkpoint 3 — Algoritmo de Grover en 2 qubits
+Capturas: capturas/CP3_grover_ejecucion.png, capturas/grover_00.png, capturas/grover_01.png, capturas/grover_10.png y capturas/grover_11.png
+
+El circuito pone los dos qubits en superposición con H, aplica el oráculo de fase que invierte el signo del estado buscado y termina con el difusor, que amplifica ese estado. Para el objetivo |11⟩ el oráculo es solo una CZ, y para los otros tres objetivos se agregan puertas X antes y después de la CZ en los qubits que deben valer 0.
+
+```
+     ┌───┐   ┌───┐┌───┐   ┌───┐┌───┐┌─┐   
+q_0: ┤ H ├─■─┤ H ├┤ X ├─■─┤ X ├┤ H ├┤M├───
+     ├───┤ │ ├───┤├───┤ │ ├───┤├───┤└╥┘┌─┐
+q_1: ┤ H ├─■─┤ H ├┤ X ├─■─┤ X ├┤ H ├─╫─┤M├
+     └───┘   └───┘└───┘   └───┘└───┘ ║ └╥┘
+c: 2/════════════════════════════════╩══╩═
+                                     0  1 
+```
+
+En la primera prueba el programa encontró bien |00⟩ y |11⟩, pero al buscar |01⟩ midió |10⟩ en los 1024 disparos y al buscar |10⟩ midió |01⟩, por lo que el mismo script imprimió ERROR en esos dos casos. Esto pasó porque Qiskit escribe los resultados con el qubit 1 a la izquierda y el qubit 0 a la derecha, mientras que el oráculo suponía el orden contrario y negaba el qubit equivocado. Por lo tanto se ajustó el oráculo para que el objetivo "01" aplique la X sobre el qubit 1 y el objetivo "10" la aplique sobre el qubit 0. Hecho esto, los cuatro objetivos se encontraron correctamente.
+
+| Objetivo | Estado medido | Conteo | Probabilidad | Resultado |
+|---|---|---|---|---|
+| \|00⟩ | \|00⟩ | 1024 | 100.0% | CORRECTO |
+| \|01⟩ | \|01⟩ | 1024 | 100.0% | CORRECTO |
+| \|10⟩ | \|10⟩ | 1024 | 100.0% | CORRECTO |
+| \|11⟩ | \|11⟩ | 1024 | 100.0% | CORRECTO |
+
+Con n=2 basta una iteración porque el espacio tiene solo 4 estados y el número óptimo de iteraciones, cercano a (π/4)·√4 ≈ 1.57, se redondea a 1. Además, en este caso la superposición inicial le da a cada estado una amplitud de 1/2, el oráculo deja la del objetivo en −1/2 y el difusor refleja todas las amplitudes alrededor de su promedio, que es 1/4. Así el objetivo pasa a amplitud 1 y los otros tres quedan en 0, por eso la probabilidad llega al 100% con una sola iteración y una segunda la volvería a bajar.
