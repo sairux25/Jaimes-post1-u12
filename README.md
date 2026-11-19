@@ -25,3 +25,36 @@ c: 2/═══════════╩══╩═
 ```
 
 En 1024 mediciones se obtuvieron 507 resultados |00⟩ (49.5%) y 517 resultados |11⟩ (50.5%), sin ningún |01⟩ ni |10⟩. La verificación del script pasó y el histograma muestra solo esas dos barras, lo que confirma la correlación perfecta del entrelazamiento, ya que al medir un qubit el otro siempre da el mismo valor.
+
+## Checkpoint 2 — Algoritmo de Deutsch-Jozsa
+Captura: capturas/CP2_deutsch_jozsa_ejecucion.png
+
+Se implementaron los dos oráculos para n=2 con un qubit auxiliar (q_2) que se prepara en |−⟩ aplicando X y luego H. El oráculo constante no aplica ninguna puerta, mientras que el balanceado aplica una CNOT de cada qubit de entrada hacia el auxiliar.
+
+```
+Oráculo constante
+     ┌───┐┌───┐┌─┐   
+q_0: ┤ H ├┤ H ├┤M├───
+     ├───┤├───┤└╥┘┌─┐
+q_1: ┤ H ├┤ H ├─╫─┤M├
+     ├───┤├───┤ ║ └╥┘
+q_2: ┤ X ├┤ H ├─╫──╫─
+     └───┘└───┘ ║  ║ 
+c: 2/═══════════╩══╩═
+                0  1 
+
+Oráculo balanceado
+     ┌───┐          ┌───┐     ┌─┐   
+q_0: ┤ H ├───────■──┤ H ├─────┤M├───
+     ├───┤       │  └───┘┌───┐└╥┘┌─┐
+q_1: ┤ H ├───────┼────■──┤ H ├─╫─┤M├
+     ├───┤┌───┐┌─┴─┐┌─┴─┐└───┘ ║ └╥┘
+q_2: ┤ X ├┤ H ├┤ X ├┤ X ├──────╫──╫─
+     └───┘└───┘└───┘└───┘      ║  ║ 
+c: 2/══════════════════════════╩══╩═
+                               0  1 
+```
+
+Con el oráculo constante las 1024 mediciones dieron |00⟩ y con el balanceado las 1024 dieron |11⟩, así que el resultado fue determinista en los dos casos y las dos verificaciones del script pasaron.
+
+Clásicamente, para n=2 hay 4 entradas posibles y se necesitan hasta 3 evaluaciones, porque si las dos primeras dan el mismo valor la función todavía puede ser balanceada y solo la tercera lo decide. En cambio, el circuito cuántico evalúa el oráculo una sola vez, ya que las puertas H ponen las 4 entradas en superposición y el auxiliar en |−⟩ hace que f(x) quede como un cambio de fase en cada una. Luego las H finales hacen interferir esas fases, de modo que si la función es constante toda la probabilidad se concentra en |00⟩ y si es balanceada la de |00⟩ se cancela por completo.
