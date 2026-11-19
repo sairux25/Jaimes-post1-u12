@@ -112,3 +112,7 @@ Al tratar todos los errores por igual, el modelo despolarizante pierde la forma 
 Se prefiere el modelo simplificado para este laboratorio porque el objetivo es mostrar de forma controlada y repetible que el ruido degrada el resultado, y eso se vio en la baja de 100.0% a 98.4%. Usar NoiseModel.from_backend() ataría el experimento a un backend concreto y a una calibración que cambia con el tiempo.
 
 Si el objetivo fuera predecir el comportamiento en un procesador IBM Quantum específico, debería usarse NoiseModel.from_backend() con la calibración más reciente de ese equipo. El modelo despolarizante subestima o sobrestima de forma sistemática los mecanismos que no representa, así que sus números no servirían para anticipar el resultado real.
+
+# PARTE 2 — Impacto cuántico en ciberseguridad
+
+El desarrollo de esta parte está en el documento docs/analisis-pqc.md.
