@@ -98,3 +98,17 @@ En la primera prueba los porcentajes salieron bien, sin embargo en la imagen com
 | \|11⟩ | 1024 (100.0%) | 1008 (98.4%) |
 
 La probabilidad de éxito bajó de 100.0% a 98.4%, es decir 1.6 puntos porcentuales, y en ejecuciones anteriores con las mismas tasas el valor con ruido estuvo entre 97.5% y 98.5%. Esta pérdida tiene sentido con el modelo configurado, ya que cada puerta tiene una pequeña probabilidad de alterar el estado y las CZ, con un error diez veces mayor, son las que más aportan. Los 16 disparos que se perdieron se repartieron entre los otros tres estados, que sin ruido nunca aparecían, pero |11⟩ sigue siendo claramente el más probable.
+
+## Decisión Técnica — Utilidad de Grover con ruido frente a la corrección de errores
+Con la degradación medida el resultado sigue siendo útil sin corrección de errores. Con ruido, |11⟩ apareció en 1008 de los 1024 disparos (98.4%) y los otros tres estados juntos solo sumaron 16, así que con 1024 shots la respuesta correcta se identifica sin ninguna duda.
+
+Escalar el mismo circuito a 10 o 20 qubits sí haría que el resultado dejara de ser útil. El error no crece de forma lineal sino que se multiplica con cada puerta, y un circuito más grande necesita muchas más CZ en serie, cada una con 1% de error, que está justo en el límite del umbral de tolerancia a fallos. Con esa profundidad la probabilidad del estado correcto se iría acercando a la de los demás hasta confundirse con ruido aleatorio.
+
+Ejecutar sobre qubits físicos sin corrección solo es razonable en circuitos pequeños y poco profundos, como este de 2 qubits y 2 CZ. Para algoritmos con utilidad real, como factorizar números grandes con Shor o simular moléculas complejas, se vuelve indispensable usar qubits lógicos protegidos por códigos de corrección de errores, porque solo así el error acumulado se mantiene bajo control.
+
+## Decisión Técnica — Modelo de ruido despolarizante frente a hardware NISQ real
+Al tratar todos los errores por igual, el modelo despolarizante pierde la forma real en que se dañan los qubits. En un procesador superconductor cada qubit tiene sus propios tiempos T1 y T2, una puerta de 2 qubits tarda varias veces más que una de 1 qubit y por eso acumula más decoherencia mientras se ejecuta, y además la medición tiene su propio error de lectura. En cambio, en este laboratorio todas las H y X recibieron el mismo 0.1% y las dos CZ el mismo 1%, sin importar el qubit ni el tiempo.
+
+Se prefiere el modelo simplificado para este laboratorio porque el objetivo es mostrar de forma controlada y repetible que el ruido degrada el resultado, y eso se vio en la baja de 100.0% a 98.4%. Usar NoiseModel.from_backend() ataría el experimento a un backend concreto y a una calibración que cambia con el tiempo.
+
+Si el objetivo fuera predecir el comportamiento en un procesador IBM Quantum específico, debería usarse NoiseModel.from_backend() con la calibración más reciente de ese equipo. El modelo despolarizante subestima o sobrestima de forma sistemática los mecanismos que no representa, así que sus números no servirían para anticipar el resultado real.
