@@ -100,3 +100,24 @@ El plan sigue las tres etapas que propone ETSI TR 103 619, que son armar el inve
 5. **Riesgos y mitigaciones.** Parte del hardware no se podrá actualizar y habrá que renovarlo, por lo que se presupuesta desde la fase de adquisiciones. La interoperabilidad entre agencias se resuelve acordando perfiles comunes, y como no se sabría si un adversario ya tiene un computador cuántico, no se espera a ver señales de amenaza para migrar.
 
 **Priorización.** Este perfil comparte la prioridad máxima con el hospital, pero además la migración es obligatoria y tiene fechas fijas, lo que lo vuelve el más estricto de los tres.
+
+## 4. Tamaños de clave y firma frente a la criptografía clásica e impacto en TLS 1.3 híbrido
+
+Los tamaños post-cuánticos son los oficiales de los documentos FIPS. Los clásicos se midieron generando claves y firmas con OpenSSL 3.2.1, tomando las claves RSA en formato DER y repitiendo 20 firmas ECDSA, ya que su tamaño en DER cambia un poco en cada firma.
+
+| Algoritmo | Tipo | Clave pública (bytes) | Clave privada (bytes) | Firma o ciphertext (bytes) | Nivel de seguridad | Fuente |
+|---|---|---|---|---|---|---|
+| RSA-3072 | Cifrado y firma clásicos | 422 (DER) | 1768 (DER) | 384 (firma) | Clásico de 128 bits, no post-cuántico | Medición con OpenSSL |
+| ECDSA P-256 | Firma clásica | 64 (punto x, y) | 32 | 69 a 72 (firma DER) | Clásico de 128 bits, no post-cuántico | Medición con OpenSSL |
+| X25519 | Intercambio de clave clásico | 32 | 32 | No aplica | Clásico de 128 bits, no post-cuántico | Medición con OpenSSL |
+| ML-KEM-768 | KEM post-cuántico | 1184 | 2400 | 1088 (ciphertext) | Categoría 3 | FIPS 203, Tabla 3 (NIST, 2024a) |
+| ML-DSA-65 | Firma post-cuántica | 1952 | 4032 | 3309 (firma) | Categoría 3 | FIPS 204, Tabla 2 (NIST, 2024b) |
+| SLH-DSA-128s | Firma post-cuántica basada en hash | 32 | 64 | 7856 (firma) | Categoría 1 | FIPS 205, Tabla 2 (NIST, 2024c) |
+
+La diferencia de escala es grande. La clave pública de ML-KEM-768 es 37 veces la de X25519 (1184 frente a 32 bytes), y la firma de ML-DSA-65 es entre 46 y 48 veces una firma ECDSA P-256, según si esta ocupa 72 o 69 bytes. SLH-DSA-128s es el caso opuesto, porque su clave pública mide lo mismo que la de X25519 pero su firma es más del doble que la de ML-DSA-65.
+
+En TLS 1.3 el grupo híbrido X25519MLKEM768 envía en el key_share del cliente la clave de encapsulamiento de ML-KEM-768 seguida de la clave X25519, en total 1216 bytes (1184 + 32), y el servidor responde con el ciphertext de ML-KEM seguido de su clave X25519, en total 1120 bytes (1088 + 32) (Kwiatkowski et al., 2026). Frente a X25519 solo, el mensaje del cliente crece 1184 bytes y el del servidor 1088 bytes, así que entre los dos el intercambio pasa de 64 a 2336 bytes.
+
+Ese crecimiento normalmente no agrega rondas de red. Cloudflare observó que el salto de latencia aparece cuando los datos superan la ventana de congestión inicial de TCP, alrededor de 10 kB con una ventana típica, porque ahí se necesita una ronda extra (Westerbaan, 2024). Los 2.3 kB del intercambio híbrido quedan muy por debajo de ese límite, y por eso Chrome y Cloudflare pudieron activarlo sin un costo notable.
+
+El problema aparece al cambiar también las firmas. Según la misma fuente, en una primera visita a un sitio se envían seis firmas y dos claves públicas entre la cadena de certificados y el handshake. Si todas fueran ECDSA P-256 y se reemplazaran por ML-DSA-65, se sumarían unos 23 kB (6 × (3309 − 71) + 2 × (1952 − 64) = 23 204 bytes), lo que supera los 10 kB de una ventana típica. En redes con alta latencia o pérdida de paquetes eso significa al menos una ronda extra, y Cloudflare midió que cruzar ese límite puede hacer la conexión más de un 60% más lenta (Westerbaan, 2024). Además, encontró clientes y equipos intermedios que fallan cuando la cadena de certificados crece más de 10 kB o 30 kB, de modo que la migración de las firmas necesita más pruebas que la del intercambio de claves.
