@@ -121,3 +121,47 @@ En TLS 1.3 el grupo híbrido X25519MLKEM768 envía en el key_share del cliente l
 Ese crecimiento normalmente no agrega rondas de red. Cloudflare observó que el salto de latencia aparece cuando los datos superan la ventana de congestión inicial de TCP, alrededor de 10 kB con una ventana típica, porque ahí se necesita una ronda extra (Westerbaan, 2024). Los 2.3 kB del intercambio híbrido quedan muy por debajo de ese límite, y por eso Chrome y Cloudflare pudieron activarlo sin un costo notable.
 
 El problema aparece al cambiar también las firmas. Según la misma fuente, en una primera visita a un sitio se envían seis firmas y dos claves públicas entre la cadena de certificados y el handshake. Si todas fueran ECDSA P-256 y se reemplazaran por ML-DSA-65, se sumarían unos 23 kB (6 × (3309 − 71) + 2 × (1952 − 64) = 23 204 bytes), lo que supera los 10 kB de una ventana típica. En redes con alta latencia o pérdida de paquetes eso significa al menos una ronda extra, y Cloudflare midió que cruzar ese límite puede hacer la conexión más de un 60% más lenta (Westerbaan, 2024). Además, encontró clientes y equipos intermedios que fallan cuando la cadena de certificados crece más de 10 kB o 30 kB, de modo que la migración de las firmas necesita más pruebas que la del intercambio de claves.
+
+## 5. Decisión Técnica — Algoritmo NIST para firmar las prescripciones del Perfil A
+ML-KEM queda descartado de entrada porque es un mecanismo de encapsulamiento de claves y no un esquema de firma. Solo sirve para acordar una clave secreta y no produce una firma que demuestre quién emitió la prescripción.
+
+Para un volumen alto de prescripciones con baja latencia conviene ML-DSA-65. Su firma ocupa 3309 bytes frente a 7856 de SLH-DSA-128s, y en las mediciones de Cloudflare firmar con SLH-DSA-128s costó unas 8000 veces el tiempo de Ed25519, mientras que ML-DSA-44, el único nivel de ML-DSA que mide esa fuente, tardó 4.8 veces y verificó en la mitad del tiempo (Westerbaan, 2024).
+
+Sí se justifica usar ML-DSA como algoritmo principal. La amenaza de capturar ahora y descifrar después afecta la confidencialidad de los datos cifrados, no la autenticidad de una firma, que se comprueba cuando la prescripción se emite y se dispensa. Por eso el horizonte de 50 a 75 años no obliga a usar aquí el esquema más conservador. SLH-DSA se reserva como respaldo para los certificados raíz y de larga vida, donde su seguridad basada solo en funciones hash pesa más que el rendimiento, y así el hospital gana diversidad criptográfica.
+
+## 6. Decisión Técnica — Modo híbrido en TLS para el Perfil B
+Lo que justifica adoptar el modo híbrido desde ahora es que cuesta muy poco. El key_share pasa de 64 a 2336 bytes sumando cliente y servidor, muy por debajo de los cerca de 10 kB donde aparece una ronda extra, así que el cliente no lo nota. Además, Chrome y Cloudflare ya lo usan en producción (Westerbaan, 2024).
+
+La doble protección vale mucho mientras ML-KEM y ML-DSA siguen siendo jóvenes. Una conexión híbrida solo queda expuesta si se rompen los dos componentes a la vez, el clásico por un computador cuántico y el post-cuántico por alguna debilidad todavía no descubierta, y los algoritmos PQC llevan muchos menos años de análisis público que las curvas elípticas.
+
+El modo híbrido no debería ser permanente. Es la transición correcta por ahora, pero la NSA advierte que agrega complejidad a los protocolos y obliga a una segunda transición cuando se abandonen los algoritmos clásicos (NSA, 2026). Por eso conviene planear el paso a PQC puro cuando ML-KEM y ML-DSA acumulen confianza, con 2031 como referencia, que es cuando CNSA 2.0 exige sus algoritmos. Como sus datos duran de 5 a 7 años y ninguna norma lo obliga, el Perfil B puede hacerlo después del Perfil C y con menos urgencia.
+
+## 7. Conclusiones
+
+La computación cuántica no afecta por igual a toda la criptografía. RSA, ECDSA y ECDH quedan rotos por el algoritmo de Shor y deben reemplazarse, mientras que AES y las funciones hash solo necesitan claves o salidas más largas para resistir a Grover.
+
+Los estándares del NIST ya permiten hacer ese reemplazo, y su costo principal está en el tamaño y no en la velocidad. En el intercambio de claves el crecimiento es pequeño y el modo híbrido se puede activar sin rondas extra, en cambio las firmas post-cuánticas son decenas de veces más grandes y su migración exige más pruebas.
+
+Por último, la prioridad de cada organización depende de cuánto tiempo deben seguir protegidos sus datos. El hospital y la entidad de defensa deben empezar ya por la amenaza de capturar ahora y descifrar después, y la startup puede avanzar con calma aprovechando que el TLS híbrido es barato.
+
+## Referencias
+
+CISA, NSA y NIST. (2023). *Quantum-readiness: Migration to post-quantum cryptography*. Cybersecurity and Infrastructure Security Agency. https://www.cisa.gov/resources-tools/resources/quantum-readiness-migration-post-quantum-cryptography
+
+ETSI. (2017). *Quantum-Safe Cryptography (QSC); Limits to quantum computing applied to symmetric key sizes* (ETSI GR QSC 006 V1.1.1). European Telecommunications Standards Institute.
+
+ETSI. (2020). *CYBER; Migration strategies and recommendations to Quantum Safe schemes* (ETSI TR 103 619 V1.1.1). European Telecommunications Standards Institute.
+
+Gidney, C., y Ekerå, M. (2021). How to factor 2048 bit RSA integers in 8 hours using 20 million noisy qubits. *Quantum, 5*, 433. https://doi.org/10.22331/q-2021-04-15-433
+
+Kwiatkowski, K., Kampanakis, P., Westerbaan, B. E., y Stebila, D. (2026). *Post-quantum traditional (PQ/T) hybrid key agreement mechanisms for TLS 1.3* (RFC 10024). Internet Engineering Task Force. https://www.rfc-editor.org/rfc/rfc10024.html
+
+National Institute of Standards and Technology. (2024a). *Module-lattice-based key-encapsulation mechanism standard* (FIPS 203). https://doi.org/10.6028/NIST.FIPS.203
+
+National Institute of Standards and Technology. (2024b). *Module-lattice-based digital signature standard* (FIPS 204). https://doi.org/10.6028/NIST.FIPS.204
+
+National Institute of Standards and Technology. (2024c). *Stateless hash-based digital signature standard* (FIPS 205). https://doi.org/10.6028/NIST.FIPS.205
+
+National Security Agency. (2026). *Commercial National Security Algorithm Suite 2.0 and quantum computing frequently asked questions* (versión 2.2). National Security Agency.
+
+Westerbaan, B. (2024, 5 de marzo). *The state of the post-quantum Internet*. The Cloudflare Blog. https://blog.cloudflare.com/pq-2024/
